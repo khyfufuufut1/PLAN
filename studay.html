@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>2026 Smart Study Planner</title>
+
+  <!-- 안드로이드 / iOS 홈 화면 설치를 위한 메타 태그 -->
+  <meta name="theme-color" content="#1C1C1E">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- React & ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- Babel -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    @keyframes slide-up { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+    .animate-in { animation: slide-up 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+    .fade-in-overlay { animation: fade-in 0.4s ease-out; }
+    
+    .tabular-nums { font-variant-numeric: tabular-nums; }
+    body { 
+      -webkit-tap-highlight-color: transparent; 
+      background: #FDFDFD; 
+      letter-spacing: -0.05em; 
+      overflow-x: hidden; 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    input, textarea { user-select: text; -webkit-user-select: text; }
+    ::-webkit-scrollbar { display: none; }
+    .custom-scrollbar::-webkit-scrollbar { display: block; width: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #1F2937; border-radius: 10px; }
+    input[type="checkbox"]:checked { background-color: #2563eb; border-color: transparent; }
+
+    /* 순수 HTML/CSS 물결 애니메이션 효과 */
+    @keyframes waveUp {
+      0% { height: 0%; opacity: 0; }
+      100% { height: var(--target-height); opacity: 1; }
+    }
+    .water-wave {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background: linear-gradient(180deg, rgba(96, 165, 250, 0.3) 0%, rgba(59, 130, 246, 0.4) 100%);
+      z-index: 0;
+      border-radius: 0 0 2rem 2rem;
+      height: var(--target-height);
+      animation: waveUp 3s ease-in-out forwards;
+    }
+  </style>
+
+  <!-- ⭐️ PWA 앱 설치를 위한 동적 스크립트 -->
+  <script>
+    const manifestJSON = {
+      "name": "2026 FLOW Planner",
+      "short_name": "FLOW",
+      "start_url": ".",
+      "display": "standalone",
+      "background_color": "#FDFDFD",
+      "theme_color": "#1C1C1E",
+      "orientation": "portrait",
+      "icons": [{
+        "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjM0I4MkY2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTAiPjwvY2lyY2xlPjxwb2x5bGluZSBwb2ludHM9IjEyIDYgMTIgMTIgMTYgMTQiPjwvcG9seWxpbmU+PC9zdmc+",
+        "sizes": "192x192", "type": "image/svg+xml"
+      }]
+    };
+    // 브라우저 보안 정책상 blob: URL로 Service Worker를 등록할 수 없어 발생하는 오류를 방지하기 위해 Data URI를 사용하고 Service Worker 등록 코드를 제거했습니다.
+    // Manifest만으로도 최신 브라우저에서는 '홈 화면에 추가' 기능이 정상적으로 동작합니다.
+    const manifestURL = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(manifestJSON));
+    const linkManifest = document.createElement('link');
+    linkManifest.rel = 'manifest'; linkManifest.href = manifestURL;
+    document.head.appendChild(linkManifest);
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const memoryStore = {};
+    const safeSetItem = (key, value) => { memoryStore[key] = value; try { localStorage.setItem(key, value); } catch (e) {} };
+    const safeGetItem = (key) => { try { return localStorage.getItem(key) || memoryStore[key]; } catch (e) { return memoryStore[key]; } };
+
+    const SVG_ICONS = {
+      play: '<polygon points="5 3 19 12 5 21 5 3"></polygon>',
+      pause: '<rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect>',
+      'rotate-ccw': '<polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>',
+      timer: '<line x1="10" y1="2" x2="14" y2="2"></line><line x1="12" y1="14" x2="15" y2="11"></line><circle cx="12" cy="14" r="8"></circle>',
+      calendar: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>',
+      'bar-chart-3': '<path d="M3 3v18h18"/><rect width="4" height="7" x="7" y="10" rx="1"/><rect width="4" height="12" x="15" y="5" rx="1"/>',
+      target: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+      'check-square': '<polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>',
+      plus: '<line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>',
+      x: '<line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>',
+      trash: '<polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>',
+      'trash-2': '<polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line>',
+      'chevron-left': '<polyline points="15 18 9 12 15 6"></polyline>',
+      'chevron-right': '<polyline points="9 18 15 12 9 6"></polyline>',
+      clock: '<circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>',
+      smile: '<circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line>',
+      meh: '<circle cx="12" cy="12" r="10"></circle><line x1="8" y1="15" x2="16" y2="15"></line><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line>',
+      frown: '<circle cx="12" cy="12" r="10"></circle><path d="M16 16s-1.5-2-4-2-4 2-4 2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line>',
+      'check-circle-2': '<circle cx="12" cy="12" r="10"></circle><polyline points="9 12 12 15 15 9"></polyline>',
+      maximize: '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>',
+      'download-cloud': '<polyline points="8 17 12 21 16 17"></polyline><line x1="12" y1="12" x2="12" y2="21"></line><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"></path>'
+    };
+
+    const Icon = ({ name, size = 24, className = "", fill = "none" }) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} dangerouslySetInnerHTML={{ __html: SVG_ICONS[name] || '' }} />
+    );
+
+    const secondsToHMS = (s) => {
+      const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+    };
+
+    const getTodayKey = () => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
+    const getDefaultDayData = (dateStr) => {
+      const d = new Date(dateStr);
+      return { date: dateStr, dayName: isNaN(d.getTime()) ? '' : ["일", "월", "화", "수", "목", "금", "토"][d.getDay()], totalSeconds: 0, todos: [], timetable: Array(24).fill(false), focus: '', condition: 'smile' };
+    };
+
+    // ⭐️ 홈 화면에 얌전히 박혀있는 인라인 타이머 ⭐️
+    // 우측 상단의 [전체화면(Maximize)] 버튼을 누르면 집중 모드가 열리도록 onOpenFocus 추가!
+    const StudyTimer = ({ currentSeconds, isActive, onToggle, onReset, todaySeconds, onOpenFocus }) => {
+      const progress = (currentSeconds % 60) / 60;
+      const radius = 110;
+      const circumference = 2 * Math.PI * radius;
+      const strokeDashoffset = circumference - progress * circumference;
+
+      return (
+        <div className="bg-[#1C1C1E] p-8 sm:p-10 rounded-[3rem] shadow-2xl flex flex-col items-center w-full relative overflow-hidden group">
+          {isActive && <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-blue-500/20 blur-3xl rounded-full pointer-events-none" />}
+          
+          {/* ⭐️ 집중 모드(확대) 버튼 */}
+          <div className="absolute top-6 right-6 z-20">
+            <button 
+              onClick={onOpenFocus} 
+              className="w-10 h-10 bg-gray-800/80 backdrop-blur text-gray-400 hover:text-white rounded-full flex items-center justify-center active:scale-90 transition-all shadow-lg border border-gray-700 hover:bg-blue-600"
+              title="집중 모드 켜기"
+            >
+              <Icon name="maximize" size={18} />
+            </button>
+          </div>
+
+          <div className="text-gray-400 font-bold text-[11px] uppercase tracking-[0.3em] mb-6 z-10">Focus Mode</div>
+          
+          <div className="relative flex items-center justify-center mb-10 z-10">
+            <svg className="transform -rotate-90 w-[260px] h-[260px] sm:w-[280px] sm:h-[280px]">
+              <circle cx="50%" cy="50%" r={radius} stroke="rgba(255,255,255,0.05)" strokeWidth="12" fill="none" />
+              <circle 
+                cx="50%" cy="50%" r={radius} 
+                stroke={isActive ? "#3B82F6" : "#4B5563"} 
+                strokeWidth="12" fill="none" strokeLinecap="round"
+                style={{ 
+                  strokeDasharray: circumference, 
+                  strokeDashoffset: strokeDashoffset,
+                  transition: isActive ? 'stroke-dashoffset 1s linear' : 'stroke-dashoffset 0.3s ease'
+                }} 
+              />
+            </svg>
+            
+            <div className="absolute flex flex-col items-center">
+              <span className="text-5xl sm:text-6xl font-mono font-black text-white tracking-tighter tabular-nums drop-shadow-md">
+                {secondsToHMS(currentSeconds)}
+              </span>
+              <div className="bg-gray-800/80 backdrop-blur-sm px-4 py-1.5 rounded-full mt-3 flex items-center gap-2 border border-gray-700">
+                <Icon name="clock" size={14} className="text-blue-400" />
+                <span className="text-gray-300 font-bold text-xs tracking-wider">누적 {secondsToHMS(todaySeconds)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-6 z-10">
+            <button onClick={onReset} className="w-14 h-14 bg-gray-800 text-gray-400 rounded-full flex items-center justify-center active:scale-90 hover:bg-gray-700 hover:text-white transition-all shadow-lg">
+              <Icon name="rotate-ccw" size={22} />
+            </button>
+            <button onClick={onToggle} className={`w-20 h-20 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-2xl ${isActive ? 'bg-orange-500 text-white shadow-orange-500/40' : 'bg-blue-600 text-white shadow-blue-600/40'}`}>
+              {isActive ? <Icon name="pause" size={32} fill="currentColor" /> : <Icon name="play" size={34} className="ml-2" fill="currentColor" />}
+            </button>
+          </div>
+        </div>
+      );
+    };
+
+    const ProjectItem = ({ project, updateProject, deleteProject }) => {
+      const [input, setInput] = useState("");
+      const subTasks = project.subTasks || [];
+      const total = subTasks.length;
+      const completed = subTasks.filter(t => t.completed).length;
+      const progress = total > 0 ? Math.floor((completed / total) * 100) : 0;
+
+      const handleAddSubTask = (e) => {
+        e.preventDefault();
+        if (input.trim()) {
+          updateProject(project.id, { subTasks: [...subTasks, { id: Date.now(), text: input.trim(), completed: false }] });
+          setInput("");
+        }
+      };
+
+      return (
+        <div className="bg-white p-8 rounded-[3rem] border border-gray-100 shadow-sm relative overflow-hidden group">
+          <div className="flex justify-between items-center mb-6">
+            <span className="font-bold text-gray-900 text-xl tracking-tight">{project.title}</span>
+            <button onClick={() => deleteProject(project.id)} className="text-gray-200 hover:text-red-400 p-2"><Icon name="trash-2" size={20} /></button>
+          </div>
+          <div className="w-full bg-gray-50 h-3 rounded-full overflow-hidden mb-3">
+            <div className="bg-blue-600 h-full transition-all duration-700 ease-out shadow-sm" style={{ width: `${progress}%` }} />
+          </div>
+          <div className="flex justify-between items-center mb-6">
+            <span className="text-[11px] font-black text-blue-600 uppercase tracking-widest">{progress}% Done</span>
+            <span className="text-[11px] font-bold text-gray-400">{completed} / {total} 완료</span>
+          </div>
+          <form onSubmit={handleAddSubTask} className="flex gap-2 mb-4">
+            <input value={input} onChange={e => setInput(e.target.value)} placeholder="소목표 추가..." className="flex-1 bg-gray-50 border-none rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-blue-100" />
+            <button type="submit" className="bg-gray-800 text-white p-3 rounded-xl hover:bg-gray-900 transition-colors"><Icon name="plus" size={16} /></button>
+          </form>
+          <div className="space-y-3 max-h-[150px] overflow-y-auto custom-scrollbar">
+            {subTasks.map(t => (
+              <div key={t.id} className="flex items-center gap-3 group/item">
+                <input type="checkbox" checked={t.completed} onChange={() => updateProject(project.id, { subTasks: subTasks.map(sub => sub.id === t.id ? { ...sub, completed: !sub.completed } : sub) })} className="w-5 h-5 rounded-lg border-gray-200 text-blue-600 focus:ring-0 cursor-pointer z-10 relative" />
+                <span className={`text-xs font-bold flex-1 truncate transition-colors ${t.completed ? 'line-through text-gray-300 font-normal' : 'text-gray-700'}`}>{t.text}</span>
+                <button onClick={() => updateProject(project.id, { subTasks: subTasks.filter(sub => sub.id !== t.id) })} className="opacity-0 group-hover/item:opacity-100 text-gray-300 hover:text-red-400 transition-opacity z-10 relative"><Icon name="x" size={14} /></button>
+              </div>
+            ))}
+            {subTasks.length === 0 && <p className="text-[10px] text-gray-300 italic py-2 text-center">소목표를 추가하여 진행률을 올리세요.</p>}
+          </div>
+        </div>
+      );
+    };
+
+    const CustomDialog = ({ dialog, onClose }) => {
+      if (!dialog) return null;
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        if (dialog.type === 'prompt') {
+          const val = e.target.elements.inputField.value.trim();
+          if (val) dialog.onSubmit(val);
+        } else { dialog.onSubmit(); }
+        onClose();
+      };
+      return (
+        <div className="fixed inset-0 bg-black/60 z-[300] flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm shadow-2xl animate-in slide-in-from-bottom-8">
+            <h3 className="font-black text-xl mb-4 text-gray-900">{dialog.title}</h3>
+            <form onSubmit={handleSubmit}>
+              {dialog.type === 'prompt' && <input name="inputField" autoFocus autoComplete="off" className="w-full bg-gray-50 border-none rounded-2xl p-4 mb-6 font-bold text-gray-800 focus:ring-4 focus:ring-blue-100" placeholder={dialog.placeholder || "입력해주세요"} />}
+              <div className="flex gap-3 justify-end mt-4">
+                <button type="button" onClick={onClose} className="px-5 py-3 text-gray-400 font-bold hover:bg-gray-50 rounded-2xl transition-colors">취소</button>
+                <button type="submit" className={`px-6 py-3 rounded-2xl font-bold text-white shadow-lg active:scale-95 transition-transform ${dialog.type === 'confirm' ? 'bg-red-500 shadow-red-200' : 'bg-blue-600 shadow-blue-200'}`}>{dialog.type === 'confirm' ? '삭제하기' : '확인'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      );
+    };
+
+    const CalendarCell = ({ day, monthDate, todayKey, plannerData, onSelect }) => {
+      const dateStr = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const data = plannerData[dateStr];
+      const isToday = dateStr === todayKey;
+      const totalTodos = data?.todos?.length || 0;
+      const completedTodos = data?.todos?.filter(t => t.completed).length || 0;
+      const targetPercent = totalTodos > 0 ? Math.floor((completedTodos / totalTodos) * 100) : 0;
+
+      return (
+        <button onClick={() => onSelect(dateStr)} className={`relative overflow-hidden h-24 sm:h-32 rounded-[2rem] border transition-all flex flex-col items-center justify-center active:scale-95 ${isToday ? 'border-blue-600 bg-white shadow-lg scale-105 z-10' : 'border-gray-50 bg-white hover:border-blue-100'}`}>
+          {targetPercent > 0 && <div className="water-wave" style={{ '--target-height': `${targetPercent}%` }} />}
+          <div className="relative z-10 flex flex-col items-center w-full pointer-events-none">
+            <span className={`text-sm font-bold ${isToday ? 'text-blue-600' : 'text-gray-700'}`}>{day}</span>
+            {data?.totalSeconds > 0 && <span className="text-[10px] font-black text-blue-600 mt-2 bg-white/80 backdrop-blur-sm px-2 rounded-lg py-1 leading-none shadow-sm border border-blue-50">{secondsToHMS(data.totalSeconds)}</span>}
+          </div>
+        </button>
+      );
+    };
+
+    const App = () => {
+      const [activeTab, setActiveTab] = useState('home');
+      const [plannerData, setPlannerData] = useState({});
+      const [projects, setProjects] = useState([]);
+      const [weeklyGoal, setWeeklyGoal] = useState("");
+      
+      const [selectedDateKey, setSelectedDateKey] = useState(null); 
+      const [monthDate, setMonthDate] = useState(new Date(2026, 3, 1)); 
+      const [saveNotify, setSaveNotify] = useState(false);
+      const [isLandscape, setIsLandscape] = useState(window.innerWidth > window.innerHeight);
+      const [dialog, setDialog] = useState(null); 
+      const [homeTodoInput, setHomeTodoInput] = useState(""); 
+
+      const [timerActive, setTimerActive] = useState(false);
+      const [timerSeconds, setTimerSeconds] = useState(0);
+      
+      // ⭐️ 집중 모드 상태 추가
+      const [isFocusMode, setIsFocusMode] = useState(false);
+
+      // 백그라운드에서도 정확한 시간 측정 로직
+      useEffect(() => {
+        let interval;
+        if (timerActive) {
+          let lastTime = Date.now();
+          interval = setInterval(() => {
+            const currentTime = Date.now();
+            const deltaSeconds = Math.floor((currentTime - lastTime) / 1000);
+            if (deltaSeconds > 0) {
+              setTimerSeconds(prev => prev + deltaSeconds);
+              lastTime += deltaSeconds * 1000;
+            }
+          }, 500);
+        }
+        return () => clearInterval(interval);
+      }, [timerActive]);
+
+      const triggerNotify = () => {
+        setSaveNotify(true);
+        setTimeout(() => setSaveNotify(false), 2000);
+      };
+
+      useEffect(() => {
+        const rawData = safeGetItem('OFFLINE_PLANNER_DB');
+        const rawProj = safeGetItem('OFFLINE_PROJ_DB');
+        const rawGoal = safeGetItem('OFFLINE_GOAL_DB');
+        if (rawData) setPlannerData(JSON.parse(rawData));
+        if (rawProj) setProjects(JSON.parse(rawProj));
+        if (rawGoal) setWeeklyGoal(rawGoal);
+
+        const handleResize = () => setIsLandscape(window.innerWidth > window.innerHeight);
+        window.addEventListener('resize', handleResize);
+        
+        return () => window.removeEventListener('resize', handleResize);
+      }, []);
+
+      const updateDayData = (dateStr, partialData) => {
+        const raw = safeGetItem('OFFLINE_PLANNER_DB');
+        let db = {}; try { db = raw ? JSON.parse(raw) : {}; } catch(e) {}
+        db[dateStr] = { ...(db[dateStr] || getDefaultDayData(dateStr)), ...partialData };
+        safeSetItem('OFFLINE_PLANNER_DB', JSON.stringify(db));
+        setPlannerData({...db}); 
+      };
+
+      const saveTimerToDB = (secs) => {
+        if (secs <= 0) return;
+        const today = getTodayKey();
+        const raw = safeGetItem('OFFLINE_PLANNER_DB');
+        let db = {}; try { db = raw ? JSON.parse(raw) : {}; } catch(e) {}
+        db[today] = { ...(db[today] || getDefaultDayData(today)), totalSeconds: ((db[today] || getDefaultDayData(today)).totalSeconds || 0) + secs };
+        safeSetItem('OFFLINE_PLANNER_DB', JSON.stringify(db));
+        setPlannerData({...db});
+        triggerNotify();
+      };
+
+      const updateProjectsDB = (updaterFunc) => {
+        const raw = safeGetItem('OFFLINE_PROJ_DB');
+        let db = []; try { db = raw ? JSON.parse(raw) : []; } catch(e) {}
+        const newDb = updaterFunc(db);
+        safeSetItem('OFFLINE_PROJ_DB', JSON.stringify(newDb));
+        setProjects([...newDb]);
+        triggerNotify();
+      };
+
+      const handleTimerToggle = () => {
+        if (timerActive && timerSeconds > 0) {
+          saveTimerToDB(timerSeconds); 
+          setTimerSeconds(0);
+        }
+        setTimerActive(!timerActive);
+      };
+
+      const handleTimerReset = () => {
+        if (timerSeconds > 0) saveTimerToDB(timerSeconds);
+        setTimerSeconds(0);
+        setTimerActive(false);
+      };
+
+      const todayKey = getTodayKey();
+      const todayData = plannerData[todayKey] || getDefaultDayData(todayKey);
+
+      const navTabs = [
+        { id: 'home', icon: 'timer', label: '학습' },
+        { id: 'calendar', icon: 'calendar', label: '플래너' },
+        { id: 'projects', icon: 'bar-chart-3', label: '현황' }
+      ];
+
+      return (
+        <div className={`min-h-screen bg-[#FDFDFD] font-sans selection:bg-blue-100 transition-all ${isLandscape ? 'pl-28' : 'pb-32'}`}>
+          
+          <nav className={`${isLandscape ? 'fixed left-0 top-0 bottom-0 w-28 border-r' : 'fixed bottom-8 left-8 right-8 border shadow-2xl rounded-[3rem]'} bg-white flex ${isLandscape ? 'flex-col py-12' : 'flex-row p-2'} items-center justify-around z-[100] border-gray-100`}>
+            {navTabs.map(tab => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex flex-col items-center transition-all ${isLandscape ? 'p-5 rounded-3xl' : 'flex-1 py-5 rounded-[2.5rem]'} ${activeTab === tab.id ? 'bg-gray-900 text-white shadow-xl' : 'text-gray-300 hover:text-gray-500'}`}>
+                <Icon name={tab.icon} size={isLandscape ? 28 : 22} />
+                <span className="text-[9px] mt-2 font-black uppercase tracking-tighter">{tab.label}</span>
+              </button>
+            ))}
+          </nav>
+
+          <div className={`fixed top-8 left-1/2 -translate-x-1/2 z-[200] px-8 py-4 bg-gray-900 text-white rounded-full flex items-center gap-3 shadow-2xl transition-all duration-500 ${saveNotify ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'}`}>
+            <Icon name="check-circle-2" size={18} className="text-green-400" />
+            <span className="text-xs font-black uppercase tracking-widest">저장되었습니다</span>
+          </div>
+
+          <main className={`p-8 sm:p-12 ${isLandscape ? 'max-w-7xl mx-auto' : 'w-full'}`}>
+            
+            {activeTab === 'home' && (
+              <div className={`${isLandscape ? 'flex gap-12 items-start' : 'space-y-10'}`}>
+                
+                {/* ⭐️ 홈 화면용 인라인 타이머 컴포넌트 */}
+                <div className={`${isLandscape ? 'flex-1' : ''}`}>
+                  <header className="mb-10">
+                    <h1 className="text-5xl font-black text-gray-900 tracking-tighter italic">2026 FLOW</h1>
+                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mt-2">Data Protection Active</p>
+                  </header>
+                  <StudyTimer 
+                    currentSeconds={timerSeconds} 
+                    isActive={timerActive} 
+                    onToggle={handleTimerToggle} 
+                    onReset={handleTimerReset}
+                    todaySeconds={(todayData?.totalSeconds || 0) + timerSeconds} 
+                    onOpenFocus={() => setIsFocusMode(true)}
+                  />
+                </div>
+
+                <div className={`${isLandscape ? 'w-[450px]' : 'w-full'}`}>
+                  <div className="flex flex-col gap-8">
+                    <div className="bg-blue-50/50 p-8 rounded-[3rem] border border-blue-100/50 shadow-inner flex flex-col min-h-[220px]">
+                      <div className="flex items-center gap-2 mb-5">
+                        <Icon name="target" size={20} className="text-blue-600" />
+                        <h3 className="text-[11px] font-black text-blue-900 uppercase tracking-widest">Weekly Goal</h3>
+                      </div>
+                      <textarea 
+                        value={weeklyGoal}
+                        onChange={(e) => { setWeeklyGoal(e.target.value); safeSetItem('OFFLINE_GOAL_DB', e.target.value); }}
+                        placeholder="이번 주 핵심 목표..."
+                        className="w-full bg-transparent border-none p-0 text-sm text-blue-800 placeholder-blue-300 focus:ring-0 resize-none flex-1 font-bold leading-relaxed"
+                      />
+                    </div>
+
+                    <div className="bg-white p-8 rounded-[3rem] border border-gray-100 shadow-sm flex flex-col min-h-[300px]">
+                      <div className="flex items-center gap-2 text-gray-900 mb-5">
+                        <Icon name="check-square" size={20} className="text-orange-500" />
+                        <h3 className="text-[11px] font-black uppercase tracking-widest">Today's To-do</h3>
+                      </div>
+                      
+                      <form 
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          if (homeTodoInput.trim()) {
+                            updateDayData(todayKey, { todos: [...todayData.todos, { id: Date.now(), text: homeTodoInput.trim(), completed: false }] });
+                            setHomeTodoInput("");
+                          }
+                        }}
+                        className="flex gap-2 mb-4"
+                      >
+                        <input value={homeTodoInput} onChange={(e) => setHomeTodoInput(e.target.value)} placeholder="할 일을 입력하세요" className="flex-1 bg-gray-50 border-none rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-blue-100" />
+                        <button type="submit" className="bg-blue-600 text-white p-3 rounded-xl hover:bg-blue-700 transition-colors"><Icon name="plus" size={16} /></button>
+                      </form>
+
+                      <div className="space-y-3 max-h-[160px] overflow-y-auto custom-scrollbar">
+                        {todayData.todos.length > 0 ? (
+                          todayData.todos.map(t => (
+                            <div key={t.id} className="flex items-center gap-3 group">
+                              <input type="checkbox" checked={t.completed} onChange={() => updateDayData(todayKey, { todos: todayData.todos.map(todo => todo.id === t.id ? { ...todo, completed: !todo.completed } : todo) })} className="w-5 h-5 rounded-lg border-gray-200 text-blue-600 focus:ring-0 cursor-pointer z-10 relative" />
+                              <span className={`text-xs font-bold flex-1 truncate transition-colors ${t.completed ? 'line-through text-gray-300 font-normal' : 'text-gray-700'}`}>{t.text}</span>
+                              <button onClick={() => updateDayData(todayKey, { todos: todayData.todos.filter(todo => todo.id !== t.id) })} className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 transition-opacity z-10 relative"><Icon name="x" size={14} /></button>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-[10px] text-gray-300 italic py-2 text-center">오늘의 목표를 작성해보세요.</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'calendar' && (
+              <div className="animate-in fade-in">
+                <div className="flex justify-between items-center mb-10">
+                  <h2 className="text-3xl font-black text-gray-900 tracking-tight">{monthDate.getFullYear()}년 {monthDate.getMonth() + 1}월</h2>
+                  <div className="flex gap-3">
+                    <button onClick={() => setMonthDate(new Date(monthDate.getFullYear(), monthDate.getMonth() - 1, 1))} className="p-4 bg-white border border-gray-100 rounded-[1.5rem] shadow-sm active:scale-90 transition-transform"><Icon name="chevron-left" size={24} /></button>
+                    <button onClick={() => setMonthDate(new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1))} className="p-4 bg-white border border-gray-100 rounded-[1.5rem] shadow-sm active:scale-90 transition-transform"><Icon name="chevron-right" size={24} /></button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-7 gap-4 mb-6">
+                  {["일", "월", "화", "수", "목", "금", "토"].map(d => <span key={d} className={`text-center text-[11px] font-black uppercase tracking-widest ${d === '일' ? 'text-red-400' : d === '토' ? 'text-blue-400' : 'text-gray-300'}`}>{d}</span>)}
+                </div>
+                <div className="grid grid-cols-7 gap-4">
+                  {Array.from({ length: new Date(monthDate.getFullYear(), monthDate.getMonth(), 1).getDay() }).map((_, i) => <div key={`b-${i}`} />)}
+                  {Array.from({ length: new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate() }).map((_, i) => (
+                    <CalendarCell key={i + 1} day={i + 1} monthDate={monthDate} todayKey={todayKey} plannerData={plannerData} onSelect={setSelectedDateKey} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'projects' && (
+              <div className="max-w-4xl mx-auto w-full animate-in fade-in">
+                <div className="flex justify-between items-end mb-12">
+                  <div>
+                    <h2 className="text-4xl font-black text-gray-900 tracking-tighter">My Projects</h2>
+                    <p className="text-[11px] font-bold text-gray-400 mt-1 uppercase tracking-widest">소목표 기반 진행률 관리</p>
+                  </div>
+                  <button onClick={() => setDialog({ type: 'prompt', title: '새 프로젝트 명', placeholder: '프로젝트 이름을 입력하세요', onSubmit: (title) => updateProjectsDB(prev => [...prev, { id: Date.now(), title, subTasks: [] }]) })} className="p-5 bg-gray-900 text-white rounded-[2rem] shadow-xl active:scale-95"><Icon name="plus" size={24} /></button>
+                </div>
+                <div className={`grid gap-6 ${isLandscape ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                  {projects.length === 0 && (
+                    <div className="col-span-full text-center py-20 bg-gray-50 rounded-[3rem] border border-dashed border-gray-200">
+                      <Icon name="bar-chart-3" size={40} className="mx-auto mb-4 text-gray-300" />
+                      <p className="text-xs font-bold text-gray-400">등록된 프로젝트가 없습니다.</p>
+                    </div>
+                  )}
+                  {projects.map(p => <ProjectItem key={p.id} project={p} updateProject={(id, data) => updateProjectsDB(prev => prev.map(pr => pr.id === id ? { ...pr, ...data } : pr))} deleteProject={(id) => setDialog({ type: 'confirm', title: '삭제하시겠습니까?', onSubmit: () => updateProjectsDB(prev => prev.filter(pr => pr.id !== id)) })} />)}
+                </div>
+              </div>
+            )}
+          </main>
+
+          {selectedDateKey && (
+            <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[150] flex items-end sm:items-center justify-center p-4">
+              <div className="bg-white w-full max-w-3xl rounded-t-[4rem] sm:rounded-[4rem] max-h-[92vh] overflow-y-auto animate-in slide-in-from-bottom-12 shadow-2xl">
+                <div className="p-10 border-b border-gray-50 flex justify-between items-center sticky top-0 bg-white/95 backdrop-blur-md z-10">
+                  <div>
+                    <h3 className="font-black text-3xl text-gray-900 tracking-tighter">{selectedDateKey}</h3>
+                    <p className="text-[11px] text-orange-500 font-black uppercase tracking-[0.3em] mt-1">{(plannerData[selectedDateKey] || getDefaultDayData(selectedDateKey)).dayName} Study Log</p>
+                  </div>
+                  <button onClick={() => setSelectedDateKey(null)} className="p-4 bg-gray-100 rounded-full text-gray-400 hover:text-gray-900 transition-all"><Icon name="x" size={28} /></button>
+                </div>
+                {(() => {
+                  const currentData = plannerData[selectedDateKey] || getDefaultDayData(selectedDateKey);
+                  return (
+                    <div className="p-10 space-y-12 pb-24">
+                      <div className="bg-gray-900 p-8 rounded-[3rem] text-white flex justify-between items-center shadow-xl">
+                        <div className="flex-1">
+                          <label className="text-[11px] opacity-40 font-black uppercase mb-2 block tracking-widest">Total Time</label>
+                          <div className="text-5xl font-mono font-bold tracking-tighter tabular-nums">{secondsToHMS(currentData.totalSeconds)}</div>
+                        </div>
+                        <Icon name="clock" size={56} className="opacity-10" />
+                      </div>
+                      
+                      <div className={`grid gap-8 ${isLandscape ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                        <div className="space-y-4">
+                          <label className="text-[11px] font-black text-gray-300 uppercase tracking-widest">Today's Vibe</label>
+                          <div className="flex bg-gray-50 p-2 rounded-[2rem]">
+                            {['smile', 'meh', 'frown'].map(c => (
+                              <button key={c} onClick={() => updateDayData(selectedDateKey, { condition: c })} className={`flex-1 py-5 rounded-[1.5rem] flex justify-center transition-all ${currentData.condition === c ? 'bg-white shadow-lg text-blue-600 scale-105' : 'text-gray-300'}`}><Icon name={c} size={28} /></button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="space-y-4">
+                          <label className="text-[11px] font-black text-gray-300 uppercase tracking-widest">Main Focus</label>
+                          <input value={currentData.focus} onChange={e => updateDayData(selectedDateKey, { focus: e.target.value })} placeholder="오늘의 핵심 목표" className="w-full bg-gray-50 border-none rounded-[2rem] p-6 text-sm font-bold focus:ring-4 focus:ring-blue-100 placeholder-gray-400" />
+                        </div>
+                      </div>
+
+                      <div className="space-y-6">
+                        <div className="flex justify-between items-center">
+                          <label className="text-[11px] font-black text-gray-300 uppercase tracking-widest">Study Contents</label>
+                          <button onClick={() => setDialog({ type: 'prompt', title: '상세 할 일 추가', onSubmit: (text) => updateDayData(selectedDateKey, { todos: [...currentData.todos, { id: Date.now(), text, completed: false }] }) })} className="text-[11px] font-black text-blue-600 bg-blue-50 px-6 py-2.5 rounded-full hover:bg-blue-100">+ Add</button>
+                        </div>
+                        <div className="space-y-3">
+                          {currentData.todos.map((t) => (
+                            <div key={t.id} className="flex items-center gap-4 bg-gray-50/50 p-4 rounded-[2rem] border border-gray-100/50 group">
+                              <input type="checkbox" checked={t.completed} onChange={() => updateDayData(selectedDateKey, { todos: currentData.todos.map(todo => todo.id === t.id ? { ...todo, completed: !todo.completed } : todo) })} className="w-6 h-6 rounded-lg border-gray-200 text-blue-600 focus:ring-blue-500 cursor-pointer z-10 relative" />
+                              <input value={t.text} onChange={e => updateDayData(selectedDateKey, { todos: currentData.todos.map(todo => todo.id === t.id ? { ...todo, text: e.target.value } : todo) })} className={`flex-1 bg-transparent border-none p-0 text-sm focus:ring-0 z-10 relative ${t.completed ? 'line-through text-gray-300 font-normal' : 'text-gray-800 font-bold'}`} />
+                              <button onClick={() => updateDayData(selectedDateKey, { todos: currentData.todos.filter(todo => todo.id !== t.id) })} className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 z-10 relative"><Icon name="x" size={20} /></button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-6">
+                        <label className="text-[11px] font-black text-gray-300 uppercase tracking-widest">Time Grid Tracker</label>
+                        <div className="grid grid-cols-6 sm:grid-cols-12 gap-2">
+                          {currentData.timetable.map((v, h) => (
+                            <button key={h} onClick={() => { const next = [...currentData.timetable]; next[h] = !next[h]; updateDayData(selectedDateKey, { timetable: next }); }} className={`h-12 rounded-2xl text-[11px] font-black transition-all ${v ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-gray-50 text-gray-300 hover:bg-gray-200'}`}>{h}</button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <button onClick={() => setSelectedDateKey(null)} className="w-full py-6 bg-blue-600 text-white rounded-[3rem] font-black shadow-xl active:scale-[0.98] transition-all hover:bg-blue-700 text-lg flex items-center justify-center gap-3">
+                        <Icon name="check-circle-2" size={24} /> 닫기 (자동 저장됨)
+                      </button>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
+          <CustomDialog dialog={dialog} onClose={() => setDialog(null)} />
+
+          {/* ⭐️ 선택형 집중 모드 (전체화면 다크 오버레이) ⭐️ */}
+          {isFocusMode && (
+            <div className="fixed inset-0 bg-[#0A0A0C] z-[9999] flex flex-col items-center justify-center fade-in-overlay">
+              
+              {/* 상단 컨트롤 바 */}
+              <div className="absolute top-0 left-0 w-full p-6 sm:p-10 flex justify-between items-center z-50">
+                <button 
+                  onClick={() => setIsFocusMode(false)} 
+                  className="text-gray-400 hover:text-white flex items-center gap-2 transition-colors active:scale-95"
+                >
+                  <Icon name="chevron-left" size={32} />
+                  <span className="font-bold tracking-wider text-sm sm:text-base">최소화</span>
+                </button>
+
+                {/* 기록 저장 버튼 (타이머가 돌아간 상태일 때만 표시) */}
+                {timerSeconds > 0 && (
+                  <button 
+                    onClick={() => {
+                      handleTimerToggle(); // 정지 및 저장
+                      setIsFocusMode(false); // 오버레이 닫기
+                    }} 
+                    className="bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/30 px-5 py-2.5 rounded-full font-bold text-xs sm:text-sm tracking-widest transition-all flex items-center gap-2 active:scale-95 shadow-lg"
+                  >
+                    <Icon name="check-circle-2" size={18} /> 기록 저장 후 종료
+                  </button>
+                )}
+              </div>
+
+              {/* 중앙 거대 원형 타이머 */}
+              <div className="relative flex items-center justify-center">
+                <svg className="transform -rotate-90 w-[300px] h-[300px] sm:w-[450px] sm:h-[450px] drop-shadow-[0_0_35px_rgba(59,130,246,0.2)]">
+                  <circle cx="50%" cy="50%" r="42%" stroke="rgba(255,255,255,0.05)" strokeWidth="12" fill="none" />
+                  <circle 
+                    cx="50%" cy="50%" r="42%" 
+                    stroke={timerActive ? "#3B82F6" : "#4B5563"} 
+                    strokeWidth="12" fill="none" strokeLinecap="round"
+                    style={{ 
+                      strokeDasharray: '264%', 
+                      strokeDashoffset: `${264 - (timerSeconds % 60) / 60 * 264}%`,
+                      transition: timerActive ? 'stroke-dashoffset 1s linear' : 'stroke-dashoffset 0.3s ease'
+                    }} 
+                  />
+                </svg>
+                
+                <div className="absolute flex flex-col items-center justify-center">
+                  <span className="text-gray-400 text-[10px] sm:text-xs font-bold tracking-[0.4em] uppercase mb-4 opacity-70">Deep Focus</span>
+                  <span className="text-6xl sm:text-8xl font-mono font-black text-white tabular-nums tracking-tighter drop-shadow-2xl">
+                    {secondsToHMS(timerSeconds)}
+                  </span>
+                  <div className="mt-8 flex items-center gap-2 bg-white/5 border border-white/10 px-5 py-2.5 rounded-full backdrop-blur-md">
+                    <Icon name="clock" size={16} className="text-blue-400" />
+                    <span className="text-gray-300 font-bold text-xs sm:text-sm tracking-widest">
+                      오늘 총 {secondsToHMS((todayData?.totalSeconds || 0) + timerSeconds)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 하단 재생/일시정지 버튼 */}
+              <div className="absolute bottom-12 sm:bottom-20 flex gap-8">
+                <button 
+                  onClick={() => setTimerActive(!timerActive)} 
+                  className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center transition-all shadow-2xl active:scale-90 ${timerActive ? 'bg-orange-500 text-white shadow-orange-500/30' : 'bg-blue-600 text-white shadow-blue-600/30'}`}
+                >
+                  {timerActive ? <Icon name="pause" size={36} fill="currentColor" /> : <Icon name="play" size={42} className="ml-2" fill="currentColor" />}
+                </button>
+              </div>
+
+            </div>
+          )}
+
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
